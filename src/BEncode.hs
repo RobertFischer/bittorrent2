@@ -679,7 +679,7 @@ hPutBData handle = liftIO . BSB.hPutBuilder handle . unpack
 -- | Unpacks the 'BData' into a 'BSB.Builder'. You can go from there to your favorite kind of 'ByteString',
 --   or even directly into a 'Handle' via 'BSB.hPutBuilder'.
 unpack :: BData -> BSB.Builder
-unpack = lazy build
+unpack = build . lazy
   where
     build (BBytes BBytesEmpty) = BSB.string7 "0:"
     build (BBytes (BBytesChar7 c)) = BSB.string7 "1:" <> BSB.char7 c
