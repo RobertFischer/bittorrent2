@@ -1,0 +1,94 @@
+name:                bittorrent2
+version:             0.0.0.1
+synopsis:            Haskell library providing the BitTorrent protocol (v1 and v2)
+description:          A Haskell library supporting both GHC and GHCJS that provides the BitTorrent protocol (v1 and v2) over TCP, UDP, ZeroConf (aka: Bonjour), and WebRTC, depending on what is available.
+homepage:            https://github.com/RobertFischer/bittorrent2#README.md
+license:             PublicDomain
+license-file:        LICENSE
+author:              Robert Fischer
+maintainer:          smokejumperit+stack@gmail.com
+copyright:           Robert Fischer
+category:            Web
+build-type:          Simple
+cabal-version:       >=1.10
+extra-source-files:  README.md
+
+Flag Development
+  Description: Turn on errors for warnings
+  Default:     False
+  Manual:      True
+
+library
+  hs-source-dirs:      src
+  default-language:    Haskell2010
+  default-extensions:  RebindableSyntax
+                     , MonadFailDesugaring
+                     , MultiParamTypeClasses
+                     , DisambiguateRecordFields
+                     , DeriveGeneric
+                     , TypeFamilies
+  ghc-options:         -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -fno-warn-orphans
+  ghc-options:         -fno-max-relevant-binds -fprint-potential-instances -Wno-missing-monadfail-instances
+  ghc-options:         -fno-warn-name-shadowing -fno-warn-tabs -Wnoncanonical-monad-instances -Wall-missed-specialisations
+  ghc-options:         -Wnoncanonical-monadfail-instances -Wimplicit-prelude -Wmissing-exported-signatures -Widentities
+  if flag(Development)
+    ghc-options:       -Werror -O0 -fno-warn-unused-imports -fno-warn-unused-top-binds -dcore-lint -dcmm-lint
+  else
+    ghc-options:       -O2
+    ghc-options:       -feager-blackholing -funbox-strict-fields -funfolding-use-threshold=300 -fstatic-argument-transformation
+    ghc-options:       -flate-dmd-anal -fexpose-all-unfoldings -fspecialise-aggressively -fexcess-precision -j16
+    ghc-options:       -fmax-simplifier-iterations=20 -fsimplifier-phases=5 -fstrictness-before=4 -funfolding-keeness-factor=3.0
+  build-depends:       base >= 4.7 && < 5
+                     , rfc >= 0.0.0.25
+                     , containers >= 0.5.11.0
+                     , bytestring >= 0.10.8.2
+                     , binary >= 0.8.5.1
+  exposed-modules:     BEncode
+
+executable bittorrent2-server
+  hs-source-dirs:      app
+  main-is:             Server.hs
+  default-language:    Haskell2010
+  default-extensions:  RebindableSyntax
+                     , MonadFailDesugaring
+                     , MultiParamTypeClasses
+                     , DisambiguateRecordFields
+  if flag(Development)
+    ghc-options:       -Werror -O0 -fno-warn-unused-imports -fno-warn-unused-top-binds -dcore-lint -dcmm-lint
+  else
+    ghc-options:       -O2
+    ghc-options:       -feager-blackholing -funbox-strict-fields -funfolding-use-threshold=300 -fstatic-argument-transformation
+    ghc-options:       -flate-dmd-anal -fexpose-all-unfoldings -fspecialise-aggressively -fexcess-precision -j16
+    ghc-options:       -fmax-simplifier-iterations=20 -fsimplifier-phases=5 -fstrictness-before=4 -funfolding-keeness-factor=3.0
+
+  build-depends:       base >= 4.7 && < 5
+                     , rfc >= 0.0.0.25
+                     , bittorrent2
+
+executable bittorrent2-client
+  hs-source-dirs:      app
+  main-is:             Client.hs
+  default-language:    Haskell2010
+  default-extensions:  RebindableSyntax
+                     , MonadFailDesugaring
+                     , MultiParamTypeClasses
+                     , DisambiguateRecordFields
+  ghc-options:         -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -fno-warn-orphans
+  ghc-options:         -fno-max-relevant-binds -fprint-potential-instances -Wno-missing-monadfail-instances
+  ghc-options:         -fno-warn-name-shadowing -fno-warn-tabs -Wnoncanonical-monad-instances -Wall-missed-specialisations
+  ghc-options:         -Wnoncanonical-monadfail-instances -Wimplicit-prelude -Wmissing-exported-signatures -Widentities
+  if flag(Development)
+    ghc-options:       -Werror -O0 -fno-warn-unused-imports -fno-warn-unused-top-binds -dcore-lint -dcmm-lint
+  else
+    ghc-options:       -O2
+    ghc-options:       -feager-blackholing -funbox-strict-fields -funfolding-use-threshold=300 -fstatic-argument-transformation
+    ghc-options:       -flate-dmd-anal -fexpose-all-unfoldings -fspecialise-aggressively -fexcess-precision -j16
+    ghc-options:       -fmax-simplifier-iterations=20 -fsimplifier-phases=5 -fstrictness-before=4 -funfolding-keeness-factor=3.0
+  build-depends:       base >= 4.7 && < 5
+                     , rfc >= 0.0.0.25
+                     , bittorrent2
+
+
+source-repository head
+  type:     git
+  location: https://github.com/RobertFischer/bittorrent2
