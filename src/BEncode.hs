@@ -112,6 +112,7 @@ import qualified Data.Map.Strict         as Map
 import           Data.Ratio              ( Ratio, Rational )
 import           Data.Sequence           ( Seq, (<|), (|>) )
 import qualified Data.Sequence           as Seq
+import           GHC.Exts                ( lazy )
 import           RFC.JSON                as JSON
 import           RFC.Prelude             hiding ( ByteStringBuilder )
 import           RFC.String
@@ -678,7 +679,7 @@ hPutBData handle = liftIO . BSB.hPutBuilder handle . unpack
 -- | Unpacks the 'BData' into a 'BSB.Builder'. You can go from there to your favorite kind of 'ByteString',
 --   or even directly into a 'Handle' via 'BSB.hPutBuilder'.
 unpack :: BData -> BSB.Builder
-unpack = build
+unpack = lazy build
   where
     build (BBytes BBytesEmpty) = BSB.string7 "0:"
     build (BBytes (BBytesChar7 c)) = BSB.string7 "1:" <> BSB.char7 c
