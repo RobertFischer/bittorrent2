@@ -51,7 +51,6 @@ module BEncode
   mkBSeq,
   mkBMap,
   mkBMapL,
-  mkBMapO,
   mkBMapS,
   mkBMapT,
   -- * General Interrogation Functions
@@ -83,7 +82,6 @@ module BEncode
   fromPairsBMapT,
   toPairsBMap,
   toPairsBMapL,
-  toPairsBMapO,
   toPairsBMapS,
   toPairsBMapT,
   -- * Parse Functions
@@ -138,7 +136,7 @@ data BData = BBytes {-# UNPACK #-} !BBytes -- ^ Arbitrary bytes, which the spec 
 
 -- | The specific implementations for holding maps
 data BMap = BMapEmpty -- ^ For when no values were provided (common case)
-          | BMapSingle {-# UNPACK #-} !(ShortByteString, BData) -- ^ For when only one value was provided (common case)
+          | BMapSingle {-# UNPACK #-} !ShortByteString {-# UNPACK #-} !BData -- ^ For when only one value was provided (common case)
           | BMapMap {-# UNPACK #-} !(Map ShortByteString BData) -- ^ For the general case
   deriving (Show,Eq,Ord,Generic,Typeable)
 
@@ -150,9 +148,14 @@ data BList = BListEmpty -- ^ For when no values were provided (common case)
 
 -- | The specific implementations for holding bytes.
 data BBytes = BBytesEmpty -- ^ For when no bytes were provided (common case)
-            | BBytesChar7 !Char -- ^ Single ASCII character is often used for keys in messages
-            | BBytes' {-# UNPACK #-} !ShortByteString -- ^ For when bytes were provided, although this may also be zero-length.
+            | BBytesChar7 {-# UNPACK #-} !Char -- ^ Single ASCII character is often used for keys in messages
+            | BBytesShort {-# UNPACK #-} !ShortByteString -- ^ For when only a few bytes were provided, although this may also be zero-length.
+            | BBytesStrict {-# UNPACK #-} !StrictByteString -- ^ For when lots of bytes were provided, although this may also be zero-length. 'StrictByteString' stores the bytes outside of the heap, which is more efficient for very large blocks.
   deriving (Show,Eq,Ord,Generic,Typeable)
+
+-- | The bytecount below which we prefer 'ShortByteString', and at/above which we prefer 'StrictByteString'.
+bbytesLimit :: Int
+bbytesLimit = 4096
 
 -- | The specific implementation of holding integer values
 data BInteger = BIntegerWord8 {-# UNPACK #-} !Word8 -- ^ When we have a Word8, which is pretty common (port numbers, etc.)
@@ -166,55 +169,54 @@ data BInteger = BIntegerWord8 {-# UNPACK #-} !Word8 -- ^ When we have a Word8, w
 
 -- | Given a 'StrictByteString', produce a 'BData' that holds its contents.
 mkBBytes :: StrictByteString -> BData
-mkBBytes bs = BBytes $
-  if SBS.null bs then
-    BBytesEmpty
-  else
-    BBytes' $ Sbs.toShort bs
+mkBBytes bs
+  | SBS.null bs = BBytes BBytesEmpty
+  | SBS.length bs <= bbytesLimit = BBytes . BBytesShort $! Sbs.toShort bs
+  | otherwise = BBytes . BBytesStrict $! bs
 {-# INLINE mkBBytes #-}
 
 -- | Given a 'LazyByteString', produce a 'BData' that holds its contents.
 mkBBytesL :: LazyByteString -> BData
 mkBBytesL bs
   | LBS.null bs = BBytes BBytesEmpty
-  | otherwise = mkBBytes $ LBS.toStrict bs
+  | otherwise = mkBBytes $! LBS.toStrict bs
 {-# INLINE mkBBytesL #-}
 
 -- | Given a 'Char' (which may be representable in ASCII or not),
 --   produce a 'BData' that holds its value in UTF8.
 mkBChar :: Char -> BData
 mkBChar c
-  | Char.isAscii c = BBytes (BBytesChar7 c)
+  | Char.isAscii c = BBytes $! BBytesChar7 c
   | otherwise = mkBString [c]
 {-# INLINE mkBChar #-}
 
 -- | Given a 'String', produce a 'BData' that holds its contents as bytes encoded in UTF8.
 mkBString :: String -> BData
 mkBString []  = BBytes BBytesEmpty
-mkBString [c] = mkBChar c
-mkBString str = mkBBytes $ asUTF8 str
+mkBString [c] = mkBChar $! c
+mkBString str = mkBBytes $! asUTF8 str
 {-# INLINE mkBString #-}
 
 -- | Given an instance of 'ToText', produce a 'BData' that holds its contents as bytes encoded in UTF8.
 mkBText :: (ToText a) => a -> BData
-mkBText = mkBString . fromText . toText
+mkBText txt = mkBString $! (fromText . toText $! txt)
 {-# INLINE mkBText #-}
 {-# SPECIALIZE INLINE mkBText :: StrictText -> BData #-}
 {-# SPECIALIZE INLINE mkBText :: LazyText -> BData #-}
 
 -- | Given an instance of 'Integral', produce a 'BData' that holds its value.
 mkBInteger :: (Integral i) => i -> BData
-mkBInteger integral = BInteger $
+mkBInteger integral = BInteger $!
   case toInteger integral of
     0 -> BIntegerZero
     1 -> BIntegerOne
     2 -> BIntegerTwo
     i
-      | i < 0 && (-1 * i) <= maxWord  -> BIntegerWordNeg (fromInteger $ -1 * i)
-      | i < 0  -> BIntegerZ i
-      | i <= maxWord8 -> BIntegerWord8 (fromInteger i)
-      | i <= maxWord -> BIntegerWord (fromInteger i)
-      | otherwise -> BIntegerZ i
+      | i < 0 && (-1 * i) <= maxWord  -> BIntegerWordNeg $! fromInteger (-1 * i)
+      | i < 0  -> BIntegerZ $! i
+      | i <= maxWord8 -> BIntegerWord8 $! fromInteger i
+      | i <= maxWord -> BIntegerWord $! fromInteger i
+      | otherwise -> BIntegerZ $! i
   where
     maxWord8 :: Integer
     maxWord8 = toInteger (maxBound :: Word8)
@@ -228,11 +230,11 @@ mkBInteger integral = BInteger $
 
 -- | Given an instance of a 'Foldable', produce a 'BData' that holds its contents.
 mkBList :: (Foldable f, Item (f BData) ~ BData) => f BData -> BData
-mkBList datas = BList $
-  case F.toList datas of
+mkBList datas = BList $!
+  case F.toList $! datas of
     []   -> BListEmpty
-    [x]  -> BListSingle x
-    rest -> BListSeq (Seq.fromList rest)
+    [x]  -> BListSingle $! x
+    rest -> BListSeq $! (Seq.fromList rest)
 {-# INLINE mkBList #-}
 {-# SPECIALIZE INLINE mkBList :: [BData] -> BData #-}
 {-# SPECIALIZE INLINE mkBList :: Seq BData -> BData #-}
@@ -243,25 +245,25 @@ mkBList datas = BList $
 --   The "O" at the end of this method comes from the "o" that
 --   prefixes the 'MonoFoldable' functions.
 mkBListO :: (MonoFoldable lst, Element lst ~ BData) => lst -> BData
-mkBListO = mkBList . otoList
+mkBListO lst = mkBList $! otoList lst
 {-# INLINE mkBListO #-} -- TODO What instances should we specialize this on?
 
 -- | Given an instance of a 'Seq', produce a 'BData' that holds its contents.
 mkBSeq :: Seq BData -> BData
-mkBSeq datas = BList $
+mkBSeq datas = BList $!
   case toList datas of
     []  -> BListEmpty
-    [x] -> BListSingle x
-    _   -> BListSeq datas
+    [x] -> BListSingle $! x
+    _   -> BListSeq $! datas
 {-# INLINE mkBSeq #-}
 
 -- | Given an instance of a 'Map' from 'StrictByteString' to 'BData', produce a 'BData' that holds its contents.
 mkBMap :: Map StrictByteString BData -> BData
-mkBMap datas = BMap $
+mkBMap datas = BMap $!
   case toList datas of
     []          -> BMapEmpty
-    [(key,val)] -> BMapSingle (Sbs.toShort key, val)
-    _           -> BMapMap $ Map.mapKeys Sbs.toShort datas
+    [(key,val)] -> BMapSingle (Sbs.toShort key) val
+    _           -> BMapMap $! Map.mapKeys Sbs.toShort datas
 {-# INLINE mkBMap #-}
 
 -- | Given an instance of a 'Map' from 'LazyByteString' to 'BData', produce a 'BData' that holds its contents.
@@ -288,8 +290,9 @@ mkBMapT = mkBMap . (Map.mapKeys asUTF8)
 getBBytes :: (MonadFail m) => BData -> m StrictByteString
 getBBytes (BBytes bytes) =
   case bytes of
-    BBytesEmpty -> return mempty
-    BBytes' sbs -> return $ Sbs.fromShort sbs
+    BBytesEmpty         -> return mempty
+    BBytesShort short   -> return $! Sbs.fromShort short
+    BBytesStrict strict -> return strict
 getBBytes wrong = fail $ "Did not have bytes when expected: " <> (show wrong)
 {-# INLINE getBBytes #-}
 {-# SPECIALIZE INLINE getBBytes :: BData -> Maybe StrictByteString #-}
@@ -333,7 +336,7 @@ getBText bdata = fromText . toText <$> getBString bdata
 --   an 'IsList'. If the data does not contain a list of elements,
 --   then calls 'fail'.
 getBList :: (MonadFail m, IsList lst, Item lst ~ BData) => BData -> m lst
-getBList (BList blist) = return . fromList $
+getBList (BList blist) = return . fromList $!
   case blist of
     BListEmpty      -> []
     (BListSingle x) -> [x]
@@ -349,7 +352,7 @@ getBList wrong = fail $ "Did not have a list when expected: " <> (show wrong)
 --   get the value as an 'Integer'. If the data does not contain
 --   an integer, then calls 'fail'.
 getBInteger :: (MonadFail m) => BData -> m Integer
-getBInteger (BInteger i) = return $
+getBInteger (BInteger i) = return $!
   case i of
     (BIntegerWord w)    -> toInteger w
     (BIntegerWord8 w)   -> toInteger w
@@ -388,11 +391,11 @@ getBNum = fmap fromInteger . getBInteger
 --   data elements, return the 'Map' with its contents. If the argument
 --   is not a map, then calls 'fail'.
 getBMap :: (MonadFail m) => BData -> m (Map StrictByteString BData)
-getBMap (BMap bmap) = return $
+getBMap (BMap bmap) = return $!
   case bmap of
-    BMapEmpty              -> Map.empty
-    (BMapSingle (key,val)) -> Map.singleton (Sbs.fromShort key) val
-    (BMapMap mapmap)       -> Map.mapKeys Sbs.fromShort mapmap
+    BMapEmpty            -> Map.empty
+    (BMapSingle key val) -> Map.singleton (Sbs.fromShort key) val
+    (BMapMap mapmap)     -> Map.mapKeys Sbs.fromShort mapmap
 getBMap wrong = fail $ "Did not have a map when expected: " <> (show wrong)
 {-# INLINE getBMap #-}
 {-# SPECIALIZE INLINE getBMap :: BData -> Maybe (Map StrictByteString BData) #-}
@@ -416,7 +419,7 @@ getBMapS :: (MonadFail m) => BData -> m (Map String BData)
 getBMapS bdata = do
   pairs <- Map.toList <$> getBMap bdata
   let strKeyPairs = catMaybes $ (\(k,v) -> (\s -> (s,v)) <$> toUTF8 k) <$> pairs
-  return $ Map.fromList strKeyPairs
+  return $! Map.fromList strKeyPairs
 {-# INLINE getBMapS #-}
 {-# SPECIALIZE INLINE getBMapS :: BData -> Maybe (Map String BData) #-}
 {-# SPECIALIZE INLINE getBMapS :: BData -> IO (Map String BData) #-}
@@ -465,7 +468,7 @@ hIfEOF defaultValue f handle = do
 -- | Reads 'BData' of some arbitrary kind from the handle.
 --   If the handle is at EOF, it returns an empty map.
 hGetBData :: (MonadIO m, MonadFail m) => Handle -> m BData
-hGetBData = hIfEOF (return $ BMap BMapEmpty) $ \handle -> do
+hGetBData = hIfEOF (return $! BMap BMapEmpty) $ \handle -> do
   nextChar <- hLookAheadChar handle
   case nextChar of
     'i' -> hGetBInteger handle
@@ -496,7 +499,7 @@ hGetBInteger = hIfEOF (fail "At EOF when we expected an integer") $ \handle -> d
         '-' ->
           hSkipChar handle >> getDigits' (BSB.char7 '-' <> memo) handle
         'e' ->
-          hSkipChar handle >> return memo
+          hSkipChar handle >> (return $! memo)
         c | Char.isDigit c ->
           hSkipChar handle >> getDigits' (memo <> BSB.char7 c) handle
         _ ->
@@ -506,7 +509,7 @@ hGetBInteger = hIfEOF (fail "At EOF when we expected an integer") $ \handle -> d
 
 -- | Reads a list, returning the empty list if it is EOF and failing if it is not a properly BEncoded list.
 hGetBList :: (MonadIO m, MonadFail m) => Handle -> m BData
-hGetBList = hIfEOF (return $ BList BListEmpty) $ \handle -> do
+hGetBList = hIfEOF (return $! BList BListEmpty) $ \handle -> do
     signalChar <- hLookAheadChar handle
     case signalChar of
       'l' -> hSkipChar handle >> mkBSeq <$> getElements handle
@@ -517,7 +520,7 @@ hGetBList = hIfEOF (return $ BList BListEmpty) $ \handle -> do
       nextChar <- hIfEOF (return 'e') (hLookAheadChar) handle
       case nextChar of
         'e' ->
-          hSkipChar handle >> return memo
+          hSkipChar handle >> (return $! memo)
         _ -> do
           nextData <- hGetBData handle
           getElements' (memo |> nextData) handle
@@ -527,7 +530,7 @@ hGetBList = hIfEOF (return $ BList BListEmpty) $ \handle -> do
 -- | Gets a map/dictionary from the handle, returning the empty map if it is at EOF and failing if it is not a properly BEncoded dictionary.
 --   Note that this implementation is tolerant if the keys are out of order.
 hGetBMap :: (MonadIO m, MonadFail m) => Handle -> m BData
-hGetBMap = hIfEOF (return $ BMap BMapEmpty) $ \handle -> do
+hGetBMap = hIfEOF (return $! BMap BMapEmpty) $ \handle -> do
     signalChar <- liftIO $ IO.hGetChar handle
     case signalChar of
       'd' -> liftIO $ mkBMap <$> getContents handle
@@ -536,11 +539,11 @@ hGetBMap = hIfEOF (return $ BMap BMapEmpty) $ \handle -> do
     getContents :: Handle -> IO (Map StrictByteString BData)
     getContents = getContents' Map.empty
     getContents' :: Map StrictByteString BData -> Handle -> IO (Map StrictByteString BData)
-    getContents' memo = hIfEOF (return memo) $ \handle -> do
+    getContents' memo = hIfEOF (return $! memo) $ \handle -> do
       nextChar <- hLookAheadChar handle
       case nextChar of
         'e' ->
-          return memo
+          return $! memo
         _ -> do
           keyBytes <- hGetBBytes handle
           key <- getBBytes keyBytes
@@ -557,19 +560,25 @@ hGetBBytes = (fmap BBytes) . getBytes
     getBytes =
       hIfEOF (return BBytesEmpty) (\handle -> liftIO $ do
         byteCount <- getByteCount handle
-        bytes <- getBytes' byteCount mempty handle
-        let sbs = LBS.toStrict . BSB.toLazyByteString $ bytes
-        return $
-          if SBS.null sbs then
-            BBytesEmpty
-          else
-            BBytes' $ Sbs.toShort sbs
+        if byteCount == 0 then
+          return BBytesEmpty
+        else
+          do
+            bytes <- getBytes' byteCount mempty handle
+            let sbs = LBS.toStrict . BSB.toLazyByteString $ bytes
+            return $!
+              if SBS.null sbs then
+                BBytesEmpty
+              else if SBS.length sbs <= bbytesLimit then
+                BBytesShort $! Sbs.toShort sbs
+              else
+                BBytesStrict sbs
       )
     getBytes' cnt memo =
       if cnt <= 0 then
-        const $ return memo
+        const . return $! memo
       else
-        hIfEOF (return memo) $ \handle -> do
+        hIfEOF (return $! memo) $ \handle -> do
           bs <- C8.hGet handle cnt
           getBytes' (cnt - olength bs) (memo <> BSB.byteString bs) handle
     getByteCount = hIfEOF (return 0) (fmap read . getDigits)
@@ -683,7 +692,8 @@ unpack = build . lazy
   where
     build (BBytes BBytesEmpty) = BSB.string7 "0:"
     build (BBytes (BBytesChar7 c)) = BSB.string7 "1:" <> BSB.char7 c
-    build (BBytes (BBytes' sbs)) = BSB.intDec (Sbs.length sbs) <> BSB.char7 ':' <> BSB.shortByteString sbs
+    build (BBytes (BBytesShort sbs)) = BSB.intDec (Sbs.length sbs) <> BSB.char7 ':' <> BSB.shortByteString sbs
+    build (BBytes (BBytesStrict sbs)) = BSB.intDec (SBS.length sbs) <> BSB.char7 ':' <> BSB.byteString sbs
     build (BInteger BIntegerZero) = BSB.string7 "i0e"
     build (BInteger BIntegerOne) = BSB.string7 "i1e"
     build (BInteger BIntegerTwo) = BSB.string7 "i2e"
@@ -692,15 +702,44 @@ unpack = build . lazy
     build (BInteger (BIntegerWord w)) = BSB.char7 'i' <> BSB.wordDec w <> BSB.char7 'e'
     build (BInteger (BIntegerWord8 w)) = BSB.char7 'i' <> BSB.word8Dec w <> BSB.char7 'e'
     build (BList BListEmpty) = BSB.string7 "le"
-    build (BList (BListSingle bdata)) = BSB.char7 'l' <> build bdata <> BSB.char7 'e'
+    build (BList (BListSingle bdata)) = BSB.char7 'l' <> (build bdata) <> BSB.char7 'e'
     build (BList (BListSeq bdatas)) = BSB.char7 'l' <> (foldr (\cur rest -> build cur <> rest) mempty bdatas) <> BSB.char7 'e'
     build (BMap BMapEmpty) = BSB.string7 "de"
-    build (BMap (BMapSingle (sbs, bdata))) = BSB.char7 'd' <> buildKey sbs <> build bdata <> BSB.char7 'e'
+    build (BMap (BMapSingle sbs bdata)) = BSB.char7 'd' <> (buildKey sbs) <> (build bdata) <> BSB.char7 'e'
     build (BMap (BMapMap bmap)) = -- Ordering must be "binary ascending key", and that's guaranteed by 'Map.foldrWithkey'
       BSB.char7 'd'
       <> (Map.foldrWithKey (\key val rest -> buildKey key <> build val <> rest) mempty bmap)
       <> BSB.char7 'e'
-    buildKey = build . BBytes . BBytes'
+    buildKey = build . BBytes . BBytesShort
 {-# INLINEABLE unpack #-}
 
+-- | Get the key/value pairs out of a 'BData' which is presumed to be a map.  If it is not a
+--   map, then calls 'fail'.
 toPairsBMap :: (MonadFail m) => BData -> m [(StrictByteString, BData)]
+toPairsBMap = (fmap Map.toList) . getBMap
+{-# INLINE toPairsBMap #-}
+{-# SPECIALIZE INLINE toPairsBMap :: BData -> Maybe [(StrictByteString, BData)] #-}
+{-# SPECIALIZE INLINE toPairsBMap :: BData -> IO [(StrictByteString, BData)]    #-}
+
+-- | Get the key/value pairs out of a 'BData' which is presumed to be a map.  If it is not a
+--   map, then calls 'fail'.
+toPairsBMapL :: (MonadFail m) => BData -> m [(LazyByteString, BData)]
+toPairsBMapL = fmap (fmap $ \(sbs,bdata) -> (LBS.fromStrict sbs, bdata)) . toPairsBMap
+{-# INLINE toPairsBMapL #-}
+{-# SPECIALIZE INLINE toPairsBMapL :: BData -> Maybe [(LazyByteString, BData)] #-}
+{-# SPECIALIZE INLINE toPairsBMapL :: BData -> IO [(LazyByteString, BData)]    #-}
+
+-- | Get the key/value pairs out of a 'BData' which is presumed to be a map whose keys
+--   are convertible to UTF8. If it is not a map, then calls 'fail'. If a key cannot
+--   be converted to UTF8, it is silently discarded.
+toPairsBMapS :: (MonadFail m) => BData -> m [(String, BData)]
+toPairsBMapS bdata = do
+  pairs <- toPairsBMap bdata
+  return $ do
+    (sbs,bd) <- pairs
+    case toUTF8 sbs of
+      Nothing  -> []
+      Just str -> return (str,bd)
+{-# INLINE toPairsBMapS #-}
+{-# SPECIALIZE INLINE toPairsBMapS :: BData -> Maybe [(String, BData)] #-}
+{-# SPECIALIZE INLINE toPairsBMapS :: BData -> IO [(String, BData)]    #-}
