@@ -1,0 +1,144 @@
+name: bittorrent2
+version: '0.0.0.1'
+category: Network
+synopsis: BitTorrent v2 implementating focusing on efficiency and compatibility.
+description: >2
+  The BitTorrent protocol has two versions. The first is the established and venerable
+  v1, which is the only officially standardized protocol. The second is the newer and
+  more exciting v2, which is not yet an officially accepted standard, but which many
+  clients already implement.
+
+  This package is focused on implementing the BitTorrent 2 protocol with support for 
+  BitTorrent 1, known as "hybrid BitTorrent". The goal is to have a high performance
+  implementation that supports all of the BitTorrent Extension Proposals (BEPs) which
+  are still standards-track, especially supporting as many protocols for finding peers
+  as possible. The particular targets are support for Trackers (TCP/HTTP), UDP peer
+  discovery, and ZeroConf (Avahi/Bonjour) peer discovery. (WebRTC would really be
+  awesome, but that might be tricky.)
+
+  There are three products of this package. The first is the library which contains all
+  the implementation of the protocol, and everything but the driver for the server and 
+  client. The second product is the server, which acts like a Tracker and publishes 
+  a finite list of torrent files which are provided on server start-up. The server also
+  acts like a BitTorrent client which is only seeding (never downloading). The third 
+  product is the client daemon, which supports a more dynamic list of torrents and both
+  seeding and downloading.
+license: BSD3
+author: Robert Fischer
+maintainer: smokejumperit+bittorrent2@gmail.com
+
+github: RobertFischer/bittorrent2
+
+flags: 
+  Development:
+    description: Turn on errors for warnings
+    default: false
+    manual: true
+
+extra-source-files:
+- README.md
+- package.yaml
+- stack.yaml
+
+default-extensions:
+- RebindableSyntax
+- MonadFailDesugaring
+- FlexibleInstances
+- MultiParamTypeClasses
+- DisambiguateRecordFields
+- DeriveGeneric
+- TypeFamilies
+- BangPatterns
+
+ghc-options: 
+  - -Wall
+  - -Wcompat 
+  - -Wincomplete-record-updates 
+  - -Wincomplete-uni-patterns 
+  - -Wredundant-constraints 
+  - -fno-max-relevant-binds 
+  - -fprint-potential-instances 
+  - -Wno-missing-monadfail-instances
+  - -fno-warn-name-shadowing 
+  - -fno-warn-tabs 
+  - -Wnoncanonical-monad-instances 
+  - -Wall-missed-specialisations
+  - -Wnoncanonical-monadfail-instances 
+  - -Wimplicit-prelude 
+  - -Wmissing-exported-signatures 
+  - -Widentities
+  - -j
+
+_exe-ghc-options: &exe-ghc-options
+  - -threaded
+  - -rtsopts
+  - -with-rtsopts="-A16m -H -I0.1 -n2m -N -O4m -c -G3 -qg1 -qb -qa"
+  - -fmax-simplifier-iterations=20 
+  - -fsimplifier-phases=5 
+  - -fstrictness-before=4 
+  - -funfolding-keeness-factor=3.0
+  - -funfolding-use-threshold=300 
+
+when:
+  - condition: flag(Development)
+    then:
+      ghc-options:
+        - -Werror 
+        - -O0 
+        - -fno-warn-unused-imports 
+        - -fno-warn-unused-top-binds 
+        - -dcore-lint 
+        - -dcmm-lint
+    else:
+      ghc-options:
+        - -feager-blackholing 
+        - -funbox-strict-fields 
+        - -fstatic-argument-transformation
+        - -flate-dmd-anal 
+        - -fexpose-all-unfoldings 
+        - -fspecialise-aggressively 
+        - -fexcess-precision 
+
+dependencies:
+  - base >= 4.7 && < 5
+  - rfc >= 0.0.0.25
+
+library:
+  source-dirs: src
+  dependencies:
+    - containers >= 0.5.11.0
+    - bytestring >= 0.10.8.2
+    - binary >= 0.8.5.1
+
+tests:
+  text-conversions-test-suite:
+    source-dirs: test
+    main: Main.hs
+    ghc-options: 
+      - -rtsopts
+      - -threaded
+      - -with-rtsopts=-N
+      - -O0
+    dependencies:
+      - bittorrent2
+      - hspec
+      - hspec-discover
+      - rfc
+      - QuickCheck
+      - quickcheck-instances
+      - quickcheck-classes
+      - quickcheck-io
+
+executables:
+
+  bittorrent2-client: &client
+    source-dirs: app
+    main: Client.hs
+    dependencies:
+      - bittorrent2
+      - rfc 
+
+  bittorrent2-server:
+    <<: *client
+    main: Server.hs
+
