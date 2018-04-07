@@ -20,8 +20,6 @@ extra-deps:
 - containers-0.5.11.0
 - miso-0.18.0.0
 
-
-
 flags:
     base:
         integer-gmp: true
@@ -36,3 +34,5 @@ flags:
         non-blocking-ffi: true
     tls:
         compat: false
+    bittorrent2:
+        development: true

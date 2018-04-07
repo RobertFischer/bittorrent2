@@ -47,6 +47,7 @@ module BEncode
   mkBString,
   mkBText,
   mkBInteger,
+  mkBIntegral,
   mkBList,
   mkBListO,
   mkBSeq,
@@ -196,7 +197,7 @@ mkBString :: String -> BData
 mkBString []  = BBytes BBytesEmpty
 mkBString [c] = mkBChar $! c
 mkBString str = mkBBytes $! asUTF8 str
-{-# INLINE mkBString #-}
+{-# INLINEABLE mkBString #-}
 
 -- | Given an instance of 'ToText', produce a 'BData' that holds its contents as bytes encoded in UTF8.
 mkBText :: (ToText a) => a -> BData
@@ -205,10 +206,19 @@ mkBText txt = mkBString $! (fromText . toText $! txt)
 {-# SPECIALIZE INLINE mkBText :: StrictText -> BData #-}
 {-# SPECIALIZE INLINE mkBText :: LazyText -> BData #-}
 
--- | Given an instance of 'Integral', produce a 'BData' that holds its value.
-mkBInteger :: (Integral i) => i -> BData
-mkBInteger integral = BInteger $!
-  case toInteger integral of
+-- | Given an instance of an 'Integral', produce a 'BData' that holds its value.
+mkBIntegral :: (Integral i) => i -> BData
+mkBIntegral = mkBInteger . toInteger
+{-# INLINE mkBIntegral #-}
+{-# SPECIALIZE INLINE mkBIntegral :: Integer -> BData #-}
+{-# SPECIALIZE INLINE mkBIntegral :: Int -> BData #-}
+{-# SPECIALIZE INLINE mkBIntegral :: Word -> BData #-}
+{-# SPECIALIZE INLINE mkBIntegral :: Word8 -> BData #-}
+
+-- | Given an 'Integer', produce a 'BData' that holds its value.
+mkBInteger :: Integer -> BData
+mkBInteger z = BInteger $!
+  case z of
     0 -> BIntegerZero
     1 -> BIntegerOne
     2 -> BIntegerTwo
@@ -224,13 +234,9 @@ mkBInteger integral = BInteger $!
     maxWord :: Integer
     maxWord = toInteger (maxBound :: Word)
 {-# INLINE mkBInteger #-}
-{-# SPECIALIZE INLINE mkBInteger :: Integer -> BData #-}
-{-# SPECIALIZE INLINE mkBInteger :: Int -> BData #-}
-{-# SPECIALIZE INLINE mkBInteger :: Word -> BData #-}
-{-# SPECIALIZE INLINE mkBInteger :: Word8 -> BData #-}
 
 -- | Given an instance of a 'Foldable', produce a 'BData' that holds its contents.
-mkBList :: (Foldable f, Item (f BData) ~ BData) => f BData -> BData
+mkBList :: (Foldable f) => f BData -> BData
 mkBList datas = BList $!
   case F.toList $! datas of
     []   -> BListEmpty
@@ -289,11 +295,12 @@ mkBMapT = mkBMap . (Map.mapKeys asUTF8)
 --   'StrictByteString' which contains those bytes. If the 'BData' does not contain
 --   bytes, then calls 'fail'.
 getBBytes :: (MonadFail m) => BData -> m StrictByteString
-getBBytes (BBytes bytes) =
+getBBytes (BBytes bytes) = return $
   case bytes of
-    BBytesEmpty         -> return mempty
-    BBytesShort short   -> return $! Sbs.fromShort short
-    BBytesStrict strict -> return strict
+    BBytesEmpty         -> mempty
+    BBytesShort short   -> Sbs.fromShort short
+    BBytesStrict strict -> strict
+    BBytesChar7 c       -> asUTF8 . (:[]) $ c
 getBBytes wrong = fail $ "Did not have bytes when expected: " <> (show wrong)
 {-# INLINE getBBytes #-}
 {-# SPECIALIZE INLINE getBBytes :: BData -> Maybe StrictByteString #-}
@@ -555,7 +562,7 @@ hGetBMap = hIfEOF (return $! BMap BMapEmpty) $ \handle -> do
 
 -- | Gets the bytes of what the spec calls a "string" from the handle, returning a zero-length bytestring if it is at EOF and
 --   failing if it is not a properly BEncoded string.
-hGetBBytes :: (MonadIO m, MonadFail m) => Handle -> m BData
+hGetBBytes :: (MonadIO m) => Handle -> m BData
 hGetBBytes = (fmap BBytes) . getBytes
   where
     getBytes =
@@ -656,16 +663,14 @@ hasKeyBMapT = hasKeyBMap . asUTF8
 
 -- | Given a 'Foldable' instance containing tuples of 'StrictByteString' keys 'BData' values,
 --   construct a 'BData' of a map containing all this data.
-fromPairsBMap :: (Foldable lst, Item (lst (StrictByteString, BData)) ~ (StrictByteString,BData)) =>
-  lst (StrictByteString, BData) -> BData
+fromPairsBMap :: (Foldable lst) => lst (StrictByteString, BData) -> BData
 fromPairsBMap = mkBMap . Map.fromList . F.toList
 {-# INLINE fromPairsBMap #-}
 {-# SPECIALIZE INLINE fromPairsBMap :: [(StrictByteString, BData)] -> BData #-}
 
 -- | Given a 'Foldable' instance containing tuples of 'LazyByteString' keys 'BData' values,
 --   construct a 'BData' of a map containing all this data.
-fromPairsBMapL :: (Foldable lst, Item (lst (LazyByteString, BData)) ~ (LazyByteString,BData)) =>
-  lst (LazyByteString, BData) -> BData
+fromPairsBMapL :: (Foldable lst) => lst (LazyByteString, BData) -> BData
 fromPairsBMapL = mkBMapL . Map.fromList . F.toList
 {-# INLINE fromPairsBMapL #-}
 {-# SPECIALIZE INLINE fromPairsBMapL :: [(LazyByteString, BData)] -> BData #-}
