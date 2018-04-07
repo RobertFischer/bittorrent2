@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns     #-}
 {-# LANGUAGE CPP              #-}
 {-# LANGUAGE FlexibleContexts #-}
 -----------------------------------------------------------------------------
@@ -677,6 +678,18 @@ fromPairsBMapO :: (MonoFoldable lst, Element lst ~ (StrictByteString,BData)) => 
 fromPairsBMapO = fromPairsBMap . otoList
 {-# INLINE fromPairsBMapO #-}
 
+-- | Given a 'Foldable' instance containing tuples of 'String' keys 'BData' values,
+--   construct a 'BData' of a map containing all this data.
+fromPairsBMapS :: (Foldable lst) => lst (String, BData) -> BData
+fromPairsBMapS = mkBMapS . Map.fromList . F.toList
+{-# INLINE fromPairsBMapS #-}
+
+-- | Given a 'Foldable' instance containing tuples of 'LazyByteString' keys 'BData' values,
+--   construct a 'BData' of a map containing all this data.
+fromPairsBMapT :: (Ord str, Foldable lst, ToText str) => lst (str, BData) -> BData
+fromPairsBMapT = mkBMapT . Map.fromList . F.toList
+{-# INLINE fromPairsBMapT #-}
+
 -- | Given a 'Handle' and a 'BData', write the binary representation of the 'BData' to the 'Handle'.
 --   The 'Handle' should be in 'BlockBuffering' mode, because we're going to dump a big hunk of
 --   binary onto it.
@@ -743,3 +756,20 @@ toPairsBMapS bdata = do
 {-# INLINE toPairsBMapS #-}
 {-# SPECIALIZE INLINE toPairsBMapS :: BData -> Maybe [(String, BData)] #-}
 {-# SPECIALIZE INLINE toPairsBMapS :: BData -> IO [(String, BData)]    #-}
+
+-- | Get the key/value pairs out of a 'BData' which is presumed to be a map whose keys
+--   are convertible to UTF8. If it is not a map, then calls 'fail'. If a key cannot
+--   be converted to UTF8, it is silently discarded.
+toPairsBMapT :: (MonadFail m, FromText str) => BData -> m [(str, BData)]
+toPairsBMapT bdata = do
+  pairs <- toPairsBMap bdata
+  return $ do
+    (sbs,bd) <- pairs
+    case toUTF8 sbs of
+      Nothing     -> []
+      (Just !str) -> return (str,bd)
+{-# INLINE toPairsBMapT #-}
+{-# SPECIALIZE INLINE toPairsBMapT :: BData -> Maybe [(StrictText, BData)] #-}
+{-# SPECIALIZE INLINE toPairsBMapT :: BData -> IO    [(StrictText, BData)] #-}
+{-# SPECIALIZE INLINE toPairsBMapT :: BData -> Maybe [(LazyText, BData)]   #-}
+{-# SPECIALIZE INLINE toPairsBMapT :: BData -> IO    [(LazyText, BData)]   #-}

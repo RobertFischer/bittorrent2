@@ -111,7 +111,7 @@ library:
     - binary >= 0.8.5.1
 
 tests:
-  text-conversions-test-suite:
+  bittorent2-library-test-suite:
     source-dirs: test
     main: Main.hs
     ghc-options: 
@@ -132,13 +132,13 @@ tests:
 executables:
 
   bittorrent2-client: &client
-    source-dirs: app
-    main: Client.hs
+    source-dirs: app/client/
+    main: Main.hs
     dependencies:
       - bittorrent2
       - rfc 
 
   bittorrent2-server:
     <<: *client
-    main: Server.hs
+    source-dirs: app/server/
 
