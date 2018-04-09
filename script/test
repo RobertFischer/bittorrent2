@@ -6,7 +6,7 @@ stack exec -- hlint -j -g -c --cross ./src
 
 stack build --fast 
 stack test --fast 
-stack clean
-stack build --haddock --haddock-deps --fast
 timeout --preserve-status 10s stack exec -- bittorrent2-server
 timeout --preserve-status 10s stack exec -- bittorrent2-client
+stack clean
+stack build --haddock --haddock-deps --fast
