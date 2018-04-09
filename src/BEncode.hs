@@ -744,13 +744,13 @@ unpack = lazy . build . lazy
     build (BBytes (BBytesDec7 zeroCnt bint)) =
       let decBuilder = BSB.integerDec . getBInteger $ bint in
       let zeroesBuilder = BSB.string7 $ List.replicate (fromIntegral zeroCnt) '0' in
-      let lbs = (zeroesBuilder <> decBuilder).toLazyByteString in
-      BSB.intDec (LBS.length lbs) <> BSB.char7 ':' <> BSB.lazyByteString lbs
+      let lbs = BSB.toLazyByteString $ zeroesBuilder <> decBuilder in
+      BSB.intDec (fromIntegral $ LBS.length lbs) <> BSB.char7 ':' <> BSB.lazyByteString lbs
     build (BBytes (BBytesHex7 zeroCnt bint)) =
       let hexBuilder = BSB.string7 . toHex . getBInteger $ bint in
       let zeroesBuilder = BSB.string7 $ List.replicate (fromIntegral zeroCnt) '0' in
-      let lbs = (zeroesBuilder <> hexBuilder).toLazyByteString in
-      BSB.intDec (LBS.length lbs) <> BSB.char7 ':' <> BSB.lazyByteString lbs
+      let lbs = BSB.toLazyByteString $ zeroesBuilder <> hexBuilder in
+      BSB.intDec (fromIntegral $ LBS.length lbs) <> BSB.char7 ':' <> BSB.lazyByteString lbs
     build (BBytes (BBytesChar7 c)) = BSB.string7 "1:" <> BSB.char7 c
     build (BBytes (BBytesText7 txt)) = BSB.intDec (T.length txt) <> BSB.char7 ':' <> (BSB.string7 . T.unpack) txt
     build (BBytes (BBytesShort sbs)) = BSB.intDec (Sbs.length sbs) <> BSB.char7 ':' <> BSB.shortByteString sbs
