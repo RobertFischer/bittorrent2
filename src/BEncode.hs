@@ -169,7 +169,7 @@ data BBytes = BBytesEmpty -- ^ For when no bytes were provided (common case)
             | BBytesChar7 {-# UNPACK #-} !Char -- ^ Single ASCII character is often used for keys in messages
             | BBytesText7 {-# UNPACK #-} !StrictText -- ^ Frequent case of value which is ASCII characters
             | BBytesDec7 {-# UNPACK #-} !Word {-# UNPACK #-} !BInteger -- ^ Frequent case of a value which is an ASCII-encoded base-10 string, possibly with some leading zeroes.
-            | BBytesHex7 {-# UNPACK #-} !Word {-# UNPACK #-} !BInteger -- ^ Frequent case of value which is an ASCII-encoded hexadecimal string, possibly with some leading zeroes.
+            | BBytesHex7 {-# UNPACK #-} !Word {-# UNPACK #-} !BInteger -- ^ Frequent case of value which is an ASCII-encoded hexadecimal string, possibly with some leading zeroes. For this to kick in, we only accept lowercase 'a'..'f' as hex digits.
             | BBytesShort {-# UNPACK #-} !ShortByteString -- ^ For when only a few bytes were provided, although this may also be zero-length.
             | BBytesStrict {-# UNPACK #-} !StrictByteString -- ^ For when lots of bytes were provided, although this may also be zero-length. 'StrictByteString' stores the bytes outside of the heap, which is more efficient for very large blocks.
   deriving (Show,Eq,Ord,Generic,Typeable)
@@ -239,10 +239,11 @@ mkBString []  = BBytesEmpty
 mkBString [c] = mkBChar c
 mkBString str
   | List.all Char.isDigit str = BBytesDec7 leadingZeroCnt $! readToIntegral readDec
-  | List.all Char.isHexDigit str = BBytesHex7 leadingZeroCnt $! readToIntegral readHex
+  | List.all isHex str = BBytesHex7 leadingZeroCnt $! readToIntegral readHex
   | List.all Char.isAscii str = BBytesText7 $! T.pack str
   | otherwise = mkBBytes $! asUTF8 str
   where
+    isHex c = Char.isHexDigit c && (Char.isDigit c || Char.isLower c) -- Only accept lowercase encodings.
     readToIntegral parser =
       case parser afterZeros of
         (x,_):_ -> mkBInteger x
@@ -740,8 +741,16 @@ unpack :: BData -> BSB.Builder
 unpack = lazy . build . lazy
   where
     build (BBytes BBytesEmpty) = BSB.string7 "0:"
-    build (BBytes (BBytesDec7 zeroCnt bint)) = numberToBytes zeroCnt showInt bint
-    build (BBytes (BBytesHex7 zeroCnt bint)) = numberToBytes zeroCnt showHex bint
+    build (BBytes (BBytesDec7 zeroCnt bint)) =
+      let decBuilder = BSB.integerDec . getBInteger $ bint in
+      let zeroesBuilder = BSB.string7 $ List.replicate (fromIntegral zeroCnt) '0' in
+      let lbs = (zeroesBuilder <> decBuilder).toLazyByteString in
+      BSB.intDec (LBS.length lbs) <> BSB.char7 ':' <> BSB.lazyByteString lbs
+    build (BBytes (BBytesHex7 zeroCnt bint)) =
+      let hexBuilder = BSB.string7 . toHex . getBInteger $ bint in
+      let zeroesBuilder = BSB.string7 $ List.replicate (fromIntegral zeroCnt) '0' in
+      let lbs = (zeroesBuilder <> hexBuilder).toLazyByteString in
+      BSB.intDec (LBS.length lbs) <> BSB.char7 ':' <> BSB.lazyByteString lbs
     build (BBytes (BBytesChar7 c)) = BSB.string7 "1:" <> BSB.char7 c
     build (BBytes (BBytesText7 txt)) = BSB.intDec (T.length txt) <> BSB.char7 ':' <> (BSB.string7 . T.unpack) txt
     build (BBytes (BBytesShort sbs)) = BSB.intDec (Sbs.length sbs) <> BSB.char7 ':' <> BSB.shortByteString sbs
@@ -763,13 +772,7 @@ unpack = lazy . build . lazy
       <> (Map.foldrWithKey (\key val rest -> buildKey key <> build val <> rest) mempty bmap)
       <> BSB.char7 'e'
     buildKey = build . BBytes . BBytesShort
-    numberToBytes :: Word -> (Integer -> ShowS) -> BInteger -> BSB.Builder
-    numberToBytes leadingZeroes converter value =
-      lazy . build . BBytes . BBytesStrict . LBS.toStrict . BSB.toLazyByteString . BSB.string7 $
-      hydrateNumber leadingZeroes converter value
-    hydrateNumber :: Word -> (Integer -> ShowS) -> BInteger -> String
-    hydrateNumber leadingZeroes converter value =
-      List.replicate (fromIntegral leadingZeroes) '0' <> converter (getBInteger value) ""
+    toHex z = showHex z ""
 {-# INLINEABLE unpack #-}
 
 -- | Get the key/value pairs out of a 'BMap'.
