@@ -216,18 +216,12 @@ mkBChar '6' = BBytesDec7 0 $ BIntegerWord8 6
 mkBChar '7' = BBytesDec7 0 $ BIntegerWord8 7
 mkBChar '8' = BBytesDec7 0 $ BIntegerWord8 8
 mkBChar '9' = BBytesDec7 0 $ BIntegerWord8 9
-mkBChar 'A' = BBytesHex7 0 $ BIntegerWord8 10
-mkBChar 'B' = BBytesHex7 0 $ BIntegerWord8 11
-mkBChar 'C' = BBytesHex7 0 $ BIntegerWord8 12
-mkBChar 'D' = BBytesHex7 0 $ BIntegerWord8 13
-mkBChar 'E' = BBytesHex7 0 $ BIntegerWord8 14
-mkBChar 'F' = BBytesHex7 0 $ BIntegerWord8 15
-mkBChar 'a' = mkBChar 'A'
-mkBChar 'b' = mkBChar 'B'
-mkBChar 'c' = mkBChar 'C'
-mkBChar 'd' = mkBChar 'D'
-mkBChar 'e' = mkBChar 'E'
-mkBChar 'f' = mkBChar 'F'
+mkBChar 'a' = BBytesHex7 0 $ BIntegerWord8 10
+mkBChar 'b' = BBytesHex7 0 $ BIntegerWord8 11
+mkBChar 'c' = BBytesHex7 0 $ BIntegerWord8 12
+mkBChar 'd' = BBytesHex7 0 $ BIntegerWord8 13
+mkBChar 'e' = BBytesHex7 0 $ BIntegerWord8 14
+mkBChar 'f' = BBytesHex7 0 $ BIntegerWord8 15
 mkBChar c
   | Char.isAscii c = BBytesChar7 c
   | otherwise = mkBBytes $! asUTF8 [c]
@@ -238,6 +232,7 @@ mkBString :: String -> BBytes
 mkBString []  = BBytesEmpty
 mkBString [c] = mkBChar c
 mkBString str
+  | List.all ('0' ==) str = BBytesText7 $! T.pack str -- Need to handle this case so we don't end up popping later
   | List.all Char.isDigit str = BBytesDec7 leadingZeroCnt $! readToIntegral readDec
   | List.all isHex str = BBytesHex7 leadingZeroCnt $! readToIntegral readHex
   | List.all Char.isAscii str = BBytesText7 $! T.pack str

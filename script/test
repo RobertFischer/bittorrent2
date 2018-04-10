@@ -2,10 +2,8 @@
 
 cd `dirname $0`/..
 
-stack exec -- hlint -j -g -c --cross ./src
-
 stack build --fast 
-stack test --fast 
+stack test --fast --coverage
 timeout --preserve-status 10s stack exec -- bittorrent2-server
 timeout --preserve-status 10s stack exec -- bittorrent2-client
 stack clean

@@ -123,12 +123,19 @@ tests:
     dependencies:
       - bittorrent2
       - hspec
+      - hspec-core
       - hspec-discover
       - rfc
       - QuickCheck
       - quickcheck-instances
       - quickcheck-classes
+      - quickcheck-unicode
       - quickcheck-io
+      - generic-random
+      - test-invariant
+      - text
+      - bytestring
+      - containers
 
 executables:
 

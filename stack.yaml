@@ -18,6 +18,8 @@ extra-deps:
 - time-units-1.0.0
 - url-2.1.3
 - miso-0.18.0.0
+- test-invariant-0.4.5.0
+
 
 flags:
     base:
