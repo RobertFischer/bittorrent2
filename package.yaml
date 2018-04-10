@@ -116,6 +116,9 @@ tests:
     source-dirs: test
     main: Main.hs
     ghc-options: 
+      - -fno-warn-orphans
+      - -fno-warn-unused-imports
+      - -fno-warn-type-defaults
       - -rtsopts
       - -threaded
       - -with-rtsopts=-N
@@ -136,6 +139,8 @@ tests:
       - text
       - bytestring
       - containers
+      - smallcheck
+      - hspec-smallcheck
 
 executables:
 

@@ -232,7 +232,7 @@ mkBString :: String -> BBytes
 mkBString []  = BBytesEmpty
 mkBString [c] = mkBChar c
 mkBString str
-  | List.all ('0' ==) str = BBytesText7 $! T.pack str -- Need to handle this case so we don't end up popping later
+  | leadingZeroCnt > 1 && null afterZeros = BBytesDec7 (leadingZeroCnt - 1) BIntegerZero -- All zeroes: not handled properly below
   | List.all Char.isDigit str = BBytesDec7 leadingZeroCnt $! readToIntegral readDec
   | List.all isHex str = BBytesHex7 leadingZeroCnt $! readToIntegral readHex
   | List.all Char.isAscii str = BBytesText7 $! T.pack str
