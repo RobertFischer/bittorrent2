@@ -2,9 +2,12 @@
 
 cd `dirname $0`/..
 
-stack build --fast 
-stack test --fast --coverage
+stack test --fast --coverage --haddock --haddock-deps
 timeout --preserve-status 10s stack exec -- bittorrent2-server
 timeout --preserve-status 10s stack exec -- bittorrent2-client
+
+stack exec -- hlint -j -c --cross ./src
+
 stack clean
 stack build --haddock --haddock-deps --fast
+

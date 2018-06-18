@@ -30,8 +30,8 @@ maintainer: smokejumperit+bittorrent2@gmail.com
 github: RobertFischer/bittorrent2
 
 flags: 
-  Development:
-    description: Turn on errors for warnings
+  Production:
+    description: Turn off errors for warnings, and enable aggressive optimizations
     default: false
     manual: true
 
@@ -44,11 +44,14 @@ default-extensions:
 - RebindableSyntax
 - MonadFailDesugaring
 - FlexibleInstances
+- FlexibleContexts
 - MultiParamTypeClasses
 - DisambiguateRecordFields
 - DeriveGeneric
 - TypeFamilies
 - BangPatterns
+- CPP
+- ScopedTypeVariables
 
 ghc-options: 
   - -Wall
@@ -80,16 +83,8 @@ _exe-ghc-options: &exe-ghc-options
   - -funfolding-use-threshold=300 
 
 when:
-  - condition: flag(Development)
+  - condition: flag(Production)
     then:
-      ghc-options:
-        - -Werror 
-        - -O0 
-        - -fno-warn-unused-imports 
-        - -fno-warn-unused-top-binds 
-        - -dcore-lint 
-        - -dcmm-lint
-    else:
       ghc-options:
         - -feager-blackholing 
         - -funbox-strict-fields 
@@ -98,6 +93,13 @@ when:
         - -fexpose-all-unfoldings 
         - -fspecialise-aggressively 
         - -fexcess-precision 
+    else:
+      ghc-options:
+        - -Werror 
+        - -O0 
+        - -freverse-errors
+        - -dcore-lint 
+        - -dcmm-lint
 
 dependencies:
   - base >= 4.7 && < 5

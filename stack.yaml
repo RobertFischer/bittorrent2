@@ -6,19 +6,21 @@
 # For more information about stack's configuration, see
 # http://docs.haskellstack.org/en/stable/yaml_configuration/
 #
-#resolver: nightly-2018-03-29
-resolver: lts-11.4
+#resolver: nightly-2018-04-13
+resolver: lts-11.5
 
 packages:
 - .
 - ../rfc
 
 extra-deps: 
+- miso-0.18.0.0
 - simple-logger-0.0.4
 - time-units-1.0.0
-- url-2.1.3
-- miso-0.18.0.0
 - test-invariant-0.4.5.0
+
+
+
 
 
 flags:
@@ -36,4 +38,8 @@ flags:
     tls:
         compat: false
     bittorrent2:
-        development: true
+        production: false
+    wai-cli:
+        tls: false
+    postgresql-typed:
+        hdbc: false

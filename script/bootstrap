@@ -5,3 +5,5 @@ HEREDIR=`pwd`
 cd ..
 ROOTDIR=`pwd`
 
+stack install hlint
+stack install weeder
